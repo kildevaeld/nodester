@@ -21,7 +21,6 @@ func (n *NodeCli) Run(c *cli.Context) {
 }
 
 func (n *NodeCli) Use(c *cli.Context) {
-
 	args := c.Args()
 	if len(args) == 0 {
 		fmt.Println("Wrong usage! You must specify a version")
@@ -50,27 +49,28 @@ func (n *NodeCli) Install(c *cli.Context) {
 		fmt.Println("Wrong usage! You must specify a version")
 		os.Exit(1)
 	}
-	version := args.First()
+	for _, version := range args {
+		_, err := n.Node.Download(version, func(p DownloadProgress) {
+			str := fmt.Sprintf("Downloading... %d/%d kb\r", p.Progress/1024, p.Total/1014)
+			os.Stdout.Write([]byte(str))
+			if p.Progress == p.Total {
+				os.Stdout.WriteString("\033[2K\rDownloading... Done\n")
+			}
+		})
 
-	_, err := n.Node.Download(version, func(p DownloadProgress) {
-		str := fmt.Sprintf("Downloading... %d/%d kb\r", p.Progress/1024, p.Total/1014)
-		os.Stdout.Write([]byte(str))
-		if p.Progress == p.Total {
-			os.Stdout.WriteString("\033[2K\rDownloading... Done\n")
+		if err != nil {
+			os.Stdout.WriteString("\033[2K\rDownloading... Error:" + err.Error() + "\n")
+			os.Exit(1)
 		}
-	})
-
-	if err != nil {
-		os.Stdout.WriteString("\033[2K\rDownloading... Error!\n")
-		os.Exit(1)
+		os.Stdout.WriteString("Installing...")
+		err = n.Node.Install(version)
+		if err != nil {
+			os.Stdout.WriteString(" Error!\n")
+		} else {
+			os.Stdout.WriteString(" Done!\n")
+		}
 	}
-	os.Stdout.WriteString("Installing...")
-	err = n.Node.Install(version)
-	if err != nil {
-		os.Stdout.WriteString(" Error!\n")
-	} else {
-		os.Stdout.WriteString(" Done!\n")
-	}
+	//version := args.First()
 
 }
 
@@ -122,6 +122,10 @@ func (n *NodeCli) ListRemote(c *cli.Context) {
 		os.Stdout.WriteString(" Done!\n")
 	}
 	fmt.Printf("Remote Versions: %s\n", remote)
+}
+
+func (n *NodeCli) Current(c *cli.Context) {
+	fmt.Printf("Current: %s\n", n.Node.Current())
 }
 
 func (n *NodeCli) init(c *cli.Context) (err error) {

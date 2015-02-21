@@ -1,12 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 )
@@ -21,6 +20,7 @@ type NodeManager struct {
 	current  string
 	platform string
 	arch     string
+	Services Service
 }
 
 func exists(path string) bool {
@@ -31,9 +31,10 @@ func exists(path string) bool {
 
 // Use a given node version
 func (n *NodeManager) Use(version string) {
-	version = normalizeVersion(version)
 
-	if n.current == version {
+	v, p := n.Services.GetPrefix(version)
+
+	if n.current == v {
 		return
 	}
 
@@ -50,14 +51,15 @@ func (n *NodeManager) Use(version string) {
 
 	cur := filepath.Join(n.path, "CURRENT_VERISON")
 
-	n.current = version
-	ioutil.WriteFile(cur, []byte(version), 0755)
+	n.current = p + "@" + v
+	ioutil.WriteFile(cur, []byte(n.current), 0755)
 }
 
 func (n *NodeManager) Has(version string) bool {
-	version = normalizeVersion(version)
+	vs, p := n.Services.GetPrefix(version)
+	vap := p + "@" + vs
 	for _, v := range n.List() {
-		if v == version {
+		if v == vap {
 			return true
 		}
 	}
@@ -69,44 +71,22 @@ func (n *NodeManager) Current() string {
 }
 
 func (n *NodeManager) List() []string {
-	files, _ := ioutil.ReadDir(filepath.Join(n.path, "node"))
+	files, _ := ioutil.ReadDir(n.nodePath(nil))
 
 	var out []string
 	for _, file := range files {
 		if file.IsDir() {
-			out = append(out, file.Name())
+			out = append(out, strings.Replace(file.Name(), "-", "@", 1))
 		}
 	}
 	return out
 }
 
-func (n *NodeManager) ListRemote() ([]string, error) {
-	res, err := http.Get(NODE_MIRROR)
-	if err != nil {
-		return []string{}, err
-	}
-	b, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
-	version := string(b)
-
-	r, _ := regexp.Compile("<a[\\s\\w=\".\\/]*>([v\\d.]*)\\/\\s*<\\/a>")
-
-	v := r.FindAllStringSubmatch(version, -1)
-
-	var versions []string
-
-	for _, s := range v {
-		if len(s) == 2 && s[1] != ".." {
-			versions = append(versions, s[1])
-		}
-	}
-
-	return versions, nil
-
+func (n *NodeManager) ListRemote() (versions string, err error) {
+	return n.Services.ListRemote()
 }
 
 func (n *NodeManager) Install(version string) error {
-	version = normalizeVersion(version)
 
 	if n.Has(version) {
 		return nil
@@ -118,66 +98,52 @@ func (n *NodeManager) Install(version string) error {
 		return err
 	}
 
-	arch := n.arch
-	if arch == "amd64" {
-		arch = "x64"
-	} else if arch == "386" {
-		arch = "x86"
-	}
+	unpack_p := filepath.Base(dest)
+	unpack_p = strings.Replace(unpack_p, ".tar.gz", "", 1)
 
-	outputn := "node-" + version + "-" + n.platform + "-" + arch
+	v, p := n.Services.GetPrefix(version)
 
-	unpack_dest := filepath.Join(n.path, "node")
+	dest_p := n.nodePath(nil)
 
-	cmd := exec.Command("tar", "-zxvf", dest, "-C", unpack_dest)
+	cmd := exec.Command("tar", "-zxvf", dest, "-C", dest_p)
 
 	cmd.Run()
 
-	fp := filepath.Join(unpack_dest, version)
-	os.Rename(filepath.Join(unpack_dest, outputn), fp)
+	unpack_p = filepath.Join(dest_p, unpack_p)
+	rename_p := filepath.Join(dest_p, fmt.Sprintf("%s-%s", p, v))
+
+	os.Rename(unpack_p, rename_p)
 
 	return nil
 
 }
 
 func (n *NodeManager) Remove(version string) error {
-	version = normalizeVersion(version)
+
 	if !n.Has(version) {
 		return nil
 	}
 
-	dest := filepath.Join(n.path, "node", version)
-
+	dest := n.nodePath(&version)
 	return os.RemoveAll(dest)
 
 }
 
 func (n *NodeManager) CleanCache() (err error) {
-	dir := filepath.Join(n.path, "src")
-
+	dir := n.sourcePath(nil)
 	err = os.RemoveAll(dir)
-
 	err = os.MkdirAll(dir, 0755)
+
 	return err
 }
 
 func (n *NodeManager) Download(version string, fn func(progress DownloadProgress)) (string, error) {
-	version = normalizeVersion(version)
 
 	if n.Has(version) {
 		return "", nil
 	}
 
-	arch := n.arch
-	if arch == "amd64" {
-		arch = "x64"
-	} else if arch == "386" {
-		arch = "x86"
-	}
-
-	outputn := "node-" + version + "-" + n.platform + "-" + arch
-	filename := outputn + ".tar.gz"
-	url := NODE_MIRROR + version + "/" + filename
+	url, filename := n.Services.RemoteFile(version, n.arch, n.platform)
 
 	dest := filepath.Join(n.path, "src", filename)
 
@@ -215,23 +181,29 @@ func (n *NodeManager) init(path string) {
 	}
 
 	n.platform = runtime.GOOS
-	n.arch = runtime.GOARCH
+	n.arch = normalizeArch(runtime.GOARCH)
+}
+
+func (n *NodeManager) normalizeVersion(version string) string {
+	//s, _ := n.Services.NormalizeVersion(version)
+	return ""
 }
 
 func NewNodeManager(path string) *NodeManager {
 	n := &NodeManager{}
-
+	n.Services = &NodeService{}
 	n.init(path)
 
 	return n
 }
 
-func normalizeVersion(version string) string {
-	version = strings.Trim(version, " ")
-	if !strings.HasPrefix(version, "v") {
-		version = "v" + version
+func normalizeArch(arch string) (a string) {
+	if arch == "amd64" {
+		a = "x64"
+	} else if arch == "386" {
+		a = "x86"
 	}
-	return version
+	return
 }
 
 func (n *NodeManager) sourcePath(version *string) string {
@@ -241,12 +213,7 @@ func (n *NodeManager) sourcePath(version *string) string {
 		return path
 	}
 
-	arch := n.arch
-	if arch == "amd64" {
-		arch = "x64"
-	} else if arch == "386" {
-		arch = "x86"
-	}
+	arch := normalizeArch(n.arch)
 
 	outputn := "node-" + *version + "-" + n.platform + "-" + arch
 	filename := outputn + ".tar.gz"
@@ -254,9 +221,18 @@ func (n *NodeManager) sourcePath(version *string) string {
 }
 
 func (n *NodeManager) nodePath(version *string) string {
+
 	str := filepath.Join(n.path, "node")
 	if version == nil {
 		return str
 	}
-	return filepath.Join(str, *version)
+
+	v, p := n.Services.GetPrefix(*version)
+
+	return filepath.Join(str, p+"-"+v)
+}
+
+func (n *NodeManager) servicePath(service Service, version *string) string {
+	str := filepath.Join(n.path, service.Name())
+	return str
 }

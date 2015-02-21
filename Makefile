@@ -1,5 +1,5 @@
 PREFIX ?= /usr/local
-SRC = main.go nodester.go node.go download.go 
+SRC = main.go nodester.go node.go download.go service.go
 BUILD_NAME=nodester
 export GOPATH=$(CURDIR)/Godeps/_workspace
 

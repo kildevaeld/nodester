@@ -1,14 +1,15 @@
 package main
 
 import (
-	"github.com/codegangsta/cli"
 	"os"
+
+	"github.com/codegangsta/cli"
 )
 
 func main() {
 	app := cli.NewApp()
 	app.Name = "Nodester"
-	app.Version = "0.0.1"
+	app.Version = "0.0.3"
 	app.Author = "Rasmus Kildevæld"
 	app.Email = "rasmuskildevaeld@gmail.com"
 
@@ -18,6 +19,7 @@ func main() {
 
 }
 
+// Commands is
 func Commands() []cli.Command {
 	n := &NodeCli{}
 	return []cli.Command{
@@ -61,6 +63,11 @@ func Commands() []cli.Command {
 			ShortName: "lsr",
 			Before:    n.init,
 			Action:    n.ListRemote,
+		},
+		cli.Command{
+			Name:   "current",
+			Before: n.init,
+			Action: n.Current,
 		},
 	}
 }
