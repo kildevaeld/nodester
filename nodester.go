@@ -56,22 +56,9 @@ func (n *NodeCli) Install(c *cli.Context) {
 				str := fmt.Sprintf("%d/%d kb", p.Progress/1024, p.Total/1014)
 				prog.Progress(str)
 			})
-			fmt.Print("Tatptaptap")
+
 			return err
 		})
-		/*
-			_, err := n.Node.Download(version, func(p DownloadProgress) {
-				str := fmt.Sprintf("  Downloading ... %d/%d kb\r", p.Progress/1024, p.Total/1014)
-				os.Stdout.Write([]byte(str))
-				if p.Progress == p.Total {
-					os.Stdout.WriteString("\033[2K\r  Downloading ... ok\n")
-				}
-			})
-
-			if err != nil {
-				os.Stdout.WriteString("\033[2K\r  Downloading ... error:" + err.Error() + "\n")
-				os.Exit(1)
-			}*/
 
 		NewProcess("  Installing ...", func() error {
 			return n.Node.Install(version)
