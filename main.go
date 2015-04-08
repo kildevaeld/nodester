@@ -9,7 +9,7 @@ import (
 func main() {
 	app := cli.NewApp()
 	app.Name = "Nodester"
-	app.Version = "0.0.3"
+	app.Version = "0.0.4"
 	app.Author = "Rasmus Kildevæld"
 	app.Email = "rasmuskildevaeld@gmail.com"
 

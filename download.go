@@ -19,6 +19,10 @@ func Download(url string, writer io.Writer) (chan int64, chan DownloadProgress, 
 	go func() {
 		res, err := http.Get(url)
 
+		defer close(done)
+		defer close(progress)
+		defer close(errchan)
+
 		if err != nil {
 			errchan <- err
 			return

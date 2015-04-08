@@ -1,10 +1,12 @@
 package main
 
 import (
+	"compress/gzip"
 	"fmt"
+	. "github.com/visionmedia/go-unpack"
 	"io/ioutil"
 	"os"
-	"os/exec"
+	_ "os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -23,9 +25,9 @@ type NodeManager struct {
 	Services Service
 }
 
+//
 func exists(path string) bool {
 	_, err := os.Stat(path)
-
 	return !os.IsNotExist(err)
 }
 
@@ -105,9 +107,9 @@ func (n *NodeManager) Install(version string) error {
 
 	dest_p := n.nodePath(nil)
 
-	cmd := exec.Command("tar", "-zxvf", dest, "-C", dest_p)
-
-	cmd.Run()
+	file, _ := os.Open(dest)
+	reader, _ := gzip.NewReader(file)
+	UnpackTarball(reader, dest_p, 0)
 
 	unpack_p = filepath.Join(dest_p, unpack_p)
 	rename_p := filepath.Join(dest_p, fmt.Sprintf("%s-%s", p, v))

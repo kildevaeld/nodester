@@ -50,28 +50,34 @@ func (n *NodeCli) Install(c *cli.Context) {
 		os.Exit(1)
 	}
 	for _, version := range args {
-		_, err := n.Node.Download(version, func(p DownloadProgress) {
-			str := fmt.Sprintf("Downloading... %d/%d kb\r", p.Progress/1024, p.Total/1014)
-			os.Stdout.Write([]byte(str))
-			if p.Progress == p.Total {
-				os.Stdout.WriteString("\033[2K\rDownloading... Done\n")
-			}
+
+		NewProgress("  Downloading ...", func(prog *Progress) error {
+			_, err := n.Node.Download(version, func(p DownloadProgress) {
+				str := fmt.Sprintf("%d/%d kb", p.Progress/1024, p.Total/1014)
+				prog.Progress(str)
+			})
+			fmt.Print("Tatptaptap")
+			return err
+		})
+		/*
+			_, err := n.Node.Download(version, func(p DownloadProgress) {
+				str := fmt.Sprintf("  Downloading ... %d/%d kb\r", p.Progress/1024, p.Total/1014)
+				os.Stdout.Write([]byte(str))
+				if p.Progress == p.Total {
+					os.Stdout.WriteString("\033[2K\r  Downloading ... ok\n")
+				}
+			})
+
+			if err != nil {
+				os.Stdout.WriteString("\033[2K\r  Downloading ... error:" + err.Error() + "\n")
+				os.Exit(1)
+			}*/
+
+		NewProcess("  Installing ...", func() error {
+			return n.Node.Install(version)
 		})
 
-		if err != nil {
-			os.Stdout.WriteString("\033[2K\rDownloading... Error:" + err.Error() + "\n")
-			os.Exit(1)
-		}
-		os.Stdout.WriteString("Installing...")
-		err = n.Node.Install(version)
-		if err != nil {
-			os.Stdout.WriteString(" Error!\n")
-		} else {
-			os.Stdout.WriteString(" Done!\n")
-		}
 	}
-	//version := args.First()
-
 }
 
 func (n *NodeCli) Remove(c *cli.Context) {
@@ -83,25 +89,18 @@ func (n *NodeCli) Remove(c *cli.Context) {
 	}
 	version := args.First()
 
-	os.Stdout.WriteString(fmt.Sprintf("Removing %s...", version))
-	err := n.Node.Remove(version)
-	if err != nil {
-		os.Stdout.WriteString(" Error!\n")
-	} else {
-		os.Stdout.WriteString(" Done!\n")
-	}
+	NewProcess("  Removing "+version+" ...", func() error {
+		return n.Node.Remove(version)
+	})
 
 }
 
 func (n *NodeCli) Clear(c *cli.Context) {
 
-	os.Stdout.WriteString("Clearing cache...")
-	err := n.Node.CleanCache()
-	if err != nil {
-		os.Stdout.WriteString(" Error!")
-	} else {
-		os.Stdout.WriteString(" Done!\n")
-	}
+	NewProcess("  Clearing cache", func() error {
+		return n.Node.CleanCache()
+	})
+
 }
 
 func (n *NodeCli) List(c *cli.Context) {
@@ -112,14 +111,17 @@ func (n *NodeCli) List(c *cli.Context) {
 }
 
 func (n *NodeCli) ListRemote(c *cli.Context) {
+	p := &Process{
+		Msg: "  Fetching remote list ...",
+	}
+	p.Start()
 
-	os.Stdout.WriteString("Fetching remote list...")
 	remote, err := n.Node.ListRemote()
 	if err != nil {
-		os.Stdout.WriteString(" Error!\n")
+		p.Done("error")
 		os.Exit(1)
 	} else {
-		os.Stdout.WriteString(" Done!\n")
+		p.Done("ok")
 	}
 	fmt.Printf("Remote Versions: %s\n", remote)
 }
