@@ -23,7 +23,7 @@ func (n *NodeCli) Run(c *cli.Context) {
 func (n *NodeCli) Use(c *cli.Context) {
 	args := c.Args()
 	if len(args) == 0 {
-		fmt.Println("Wrong usage! You must specify a version")
+		fmt.Println("  Please specify a version")
 		os.Exit(1)
 	}
 	version := args.First()
@@ -31,13 +31,13 @@ func (n *NodeCli) Use(c *cli.Context) {
 
 	if !n.Node.Has(version) {
 		if !force {
-			fmt.Printf("node: %s not installed", version)
+			fmt.Printf("  %s not installed", version)
 			os.Exit(1)
 		} else {
 			n.Install(c)
 		}
 	}
-	fmt.Printf("Use version: %s\n", version)
+	fmt.Printf("  Using : %s\n", version)
 	n.Node.Use(version)
 
 }
@@ -46,15 +46,15 @@ func (n *NodeCli) Install(c *cli.Context) {
 
 	args := c.Args()
 	if len(args) == 0 {
-		fmt.Println("Wrong usage! You must specify a version")
+		fmt.Println("  Please specify a version")
 		os.Exit(1)
 	}
 	for _, version := range args {
 
-		NewProgress("  Downloading ...", func(prog *Progress) error {
+		NewProgress("  Downloading ...", func(fn func(str string)) error {
 			_, err := n.Node.Download(version, func(p DownloadProgress) {
 				str := fmt.Sprintf("%d/%d kb", p.Progress/1024, p.Total/1014)
-				prog.Progress(str)
+				fn(str)
 			})
 
 			return err
@@ -71,7 +71,7 @@ func (n *NodeCli) Remove(c *cli.Context) {
 
 	args := c.Args()
 	if len(args) == 0 {
-		fmt.Println("Wrong usage! You must specify a version")
+		fmt.Println("  Wrong usage! You must specify a version")
 		os.Exit(1)
 	}
 	version := args.First()
@@ -114,7 +114,7 @@ func (n *NodeCli) ListRemote(c *cli.Context) {
 }
 
 func (n *NodeCli) Current(c *cli.Context) {
-	fmt.Printf("Current: %s\n", n.Node.Current())
+	fmt.Printf("  Current: %s\n", n.Node.Current())
 }
 
 func (n *NodeCli) init(c *cli.Context) (err error) {
