@@ -3,7 +3,7 @@ package main
 import (
 	"compress/gzip"
 	"fmt"
-	. "github.com/visionmedia/go-unpack"
+
 	"io/ioutil"
 	"os"
 	_ "os/exec"

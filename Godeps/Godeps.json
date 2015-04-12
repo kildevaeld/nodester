@@ -1,6 +1,6 @@
 {
-	"ImportPath": "nodester",
-	"GoVersion": "go1.4.1",
+	"ImportPath": "github.com/kildevaeld/nodester",
+	"GoVersion": "go1.4.2",
 	"Deps": [
 		{
 			"ImportPath": "github.com/codegangsta/cli",
@@ -20,11 +20,6 @@
 			"ImportPath": "github.com/visionmedia/go-debug",
 			"Comment": "v2.0.0",
 			"Rev": "ff4a55a20a86994118644bbddc6a216da193cc13"
-		},
-		{
-			"ImportPath": "github.com/visionmedia/go-unpack",
-			"Comment": "1.0.0",
-			"Rev": "1d538a56c6ce3b41aa70477a2424787aeb9a3166"
 		}
 	]
 }
