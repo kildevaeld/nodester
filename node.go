@@ -2,11 +2,12 @@ package main
 
 import (
 	"compress/gzip"
+	"errors"
 	"fmt"
 
 	"io/ioutil"
 	"os"
-	_ "os/exec"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -131,6 +132,37 @@ func (n *NodeManager) Remove(version string) error {
 
 }
 
+func (n *NodeManager) Migrate(from string, to string) error {
+
+	if !n.Has(from) {
+		return errors.New("from version")
+	} else if !n.Has(to) {
+		return errors.New("to version")
+	}
+
+	fromNodeModules := filepath.Join(n.nodePath(&from), "lib", "node_modules")
+
+	files, err := ioutil.ReadDir(fromNodeModules)
+
+	if err != nil {
+		return err
+	}
+
+	var nodeMoules []string
+	for _, f := range files {
+		if f.Name() != "npm" {
+			nodeMoules = append(nodeMoules, f.Name())
+		}
+	}
+
+	toNpm := filepath.Join(n.nodePath(&to), "bin", "npm")
+
+	nodeMoules = append([]string{"install", "-g"}, nodeMoules...)
+
+	cmd := exec.Command(toNpm, nodeMoules...)
+	return cmd.Run()
+}
+
 func (n *NodeManager) CleanCache() (err error) {
 	dir := n.sourcePath(nil)
 	err = os.RemoveAll(dir)
@@ -145,6 +177,12 @@ func (n *NodeManager) Download(version string, fn func(progress DownloadProgress
 		return "", nil
 	}
 
+	if version == "latest" {
+		prefix, _ := n.Services.GetPrefix(version)
+		latest, _ := n.Services.Latest(prefix, n.platform, n.arch)
+		version = prefix + "@" + latest
+	}
+
 	url, filename := n.Services.RemoteFile(version, n.arch, n.platform)
 
 	dest := filepath.Join(n.path, "src", filename)
@@ -154,24 +192,30 @@ func (n *NodeManager) Download(version string, fn func(progress DownloadProgress
 	}
 
 	out, _ := os.Create(dest)
-	defer out.Close()
 
 	_, e := DownloadSync(url, out, fn)
+	out.Close()
+	if e != nil {
+		os.Remove(dest)
+	}
 
 	return dest, e
 }
 
 func (n *NodeManager) init(path string) {
-	stat, err := os.Stat(path)
+	stat, _ := os.Stat(path)
 
-	if os.IsNotExist(err) {
-		os.MkdirAll(path, 0755)
-		os.Mkdir(filepath.Join(path, "node"), 0755)
-		os.Mkdir(filepath.Join(path, "src"), 0755)
-		//check(err)
-	} else if !stat.IsDir() {
-		return
+	if !stat.IsDir() {
+
 	}
+
+	ensure_path(path)
+
+	srcPath := filepath.Join(path, "src")
+	nodePath := filepath.Join(path, "node")
+
+	ensure_path(srcPath)
+	ensure_path(nodePath)
 
 	n.path = path
 
@@ -184,6 +228,16 @@ func (n *NodeManager) init(path string) {
 
 	n.platform = runtime.GOOS
 	n.arch = normalizeArch(runtime.GOARCH)
+}
+
+func ensure_path(path string) {
+	if _, e := os.Stat(path); os.IsNotExist(e) {
+		err := os.MkdirAll(path, 0755)
+
+		if err != nil {
+			os.Exit(1)
+		}
+	}
 }
 
 func (n *NodeManager) normalizeVersion(version string) string {

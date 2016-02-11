@@ -2,8 +2,18 @@ package main
 
 import (
 	"fmt"
-	"github.com/tj/go-spin"
+	"os"
 	"time"
+
+	"github.com/tj/go-spin"
+	"github.com/ttacon/chalk"
+)
+
+const (
+	HideCursor = "\033[?25l"
+	ShowCursor = "\033[?25h"
+	Gray       = "\033[90m"
+	ClearLine  = "\r\033[0K"
 )
 
 type Progress struct {
@@ -15,22 +25,23 @@ func (p *Progress) Done(msg string) {
 }
 
 func (p *Progress) Update(msg string) {
-	fmt.Printf("\033[2K\r%s %s\r", p.Msg, msg)
+	fmt.Printf("\r\033[0K\033[90m%s %s", p.Msg, chalk.Cyan.Color(msg))
 }
 
-func NewProgress(msg string, fn func(p func(str string)) error) error {
+func NewProgress(msg string, fn func(func(str string)) error) error {
 
 	p := &Progress{
 		Msg: msg,
 	}
-
+	os.Stdout.Write([]byte(HideCursor))
 	err := fn(p.Update)
 
 	if err != nil {
-		p.Done("error")
+		p.Done(chalk.Red.Color("error"))
 	} else {
-		p.Done("ok")
+		p.Done(chalk.Green.Color("ok"))
 	}
+	os.Stdout.Write([]byte(ShowCursor))
 	return err
 }
 
@@ -40,10 +51,10 @@ type Process struct {
 }
 
 func (p *Process) Start() {
-
+	os.Stdout.Write([]byte(HideCursor))
 	p.done = make(chan bool)
 
-	ticker := time.NewTicker(1000 * time.Microsecond)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	s := spin.New()
 
 	go func() {
@@ -67,13 +78,14 @@ func (p *Process) Start() {
 }
 
 func (p *Process) update(msg string) {
-	fmt.Printf("\r%s %s\r", p.Msg, msg)
+	fmt.Printf("\r%s%s %s\r", Gray, p.Msg, chalk.Cyan.Color(msg))
 
 }
 
 func (p *Process) Done(msg string) {
 	p.done <- true
-	fmt.Printf("\r%s %s\n", p.Msg, msg)
+	os.Stdout.Write([]byte(ShowCursor))
+	fmt.Printf("\r%s%s %s\n", Gray, p.Msg, msg)
 
 }
 
@@ -86,9 +98,9 @@ func NewProcess(msg string, fn func() error) error {
 	err := fn()
 
 	if err != nil {
-		p.Done("error")
+		p.Done(chalk.Red.Color("error"))
 	} else {
-		p.Done("ok")
+		p.Done(chalk.Green.Color("ok"))
 	}
 	return err
 }

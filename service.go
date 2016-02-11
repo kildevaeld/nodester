@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -12,6 +13,7 @@ import (
 type Service interface {
 	Name() string
 	ListRemote() (string, error)
+	Latest(string, string, string) (string, error)
 	RemoteFile(version string, arch string, platform string) (string, string)
 	GetPrefix(str string) (version string, prefix string)
 }
@@ -26,7 +28,7 @@ func (n *NodeService) ListRemote() (string, error) {
 
 	var wg sync.WaitGroup
 
-	urls := []string{NODE_MIRROR, IOJS_MIRROR}
+	urls := []string{IOJS_MIRROR}
 
 	for _, url := range urls {
 		wg.Add(1)
@@ -35,6 +37,12 @@ func (n *NodeService) ListRemote() (string, error) {
 			defer wg.Done()
 
 			res, err := http.Get(url)
+
+			if err != nil {
+				fmt.Printf("Error %s\n", err.Error())
+				return
+			}
+
 			defer res.Body.Close()
 
 			lock.Lock()
@@ -60,14 +68,46 @@ func (n *NodeService) ListRemote() (string, error) {
 	return out, nil
 }
 
+func (n *NodeService) Latest(prefix string, platform string, arch string) (string, error) {
+	var mirror string
+	if prefix == "io" {
+		mirror = IOJS_MIRROR
+	} else {
+		mirror = NODE_MIRROR
+	}
+	mirror = mirror + "latest"
+
+	resp, err := http.Get(mirror)
+
+	if err != nil {
+		return "", nil
+	}
+
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	r, _ := regexp.Compile("<a[\\s\\w=\".\\/-]*>[v\\w]+-([-\\d.v]*)")
+
+	versions := r.FindAllStringSubmatch(string(body), -1)
+
+	var version string
+	for _, v := range versions {
+		if strings.Contains(v[0], platform+"-"+arch) {
+			version = strings.Trim(v[1], "-")
+		}
+	}
+
+	return version, nil
+
+}
+
 func (n *NodeService) formatResponse(result map[string]interface{}) string {
 	out := ""
 	for k, v := range result {
 
 		if k == NODE_MIRROR {
-			k = "NodeJS"
+			k = "node.js"
 		} else {
-			k = "IO.JS"
+			k = "io.js"
 		}
 
 		ve, ok := v.(error)
@@ -87,15 +127,21 @@ func (n *NodeService) formatResponse(result map[string]interface{}) string {
 
 		version := r.FindAllStringSubmatch(vv, -1)
 
-		var versions []string
+		var versions sort.StringSlice
 
 		for _, s := range version {
 			if len(s) == 2 && s[1] != ".." {
+				if s[1][0] == 'v' {
+					s[1] = s[1][1:]
+				}
 				versions = append(versions, s[1])
 			}
 		}
+		sort.Strings(versions)
+		sort.Sort(sort.Reverse(versions))
 
-		out = out + fmt.Sprintf("\n%s:\n %s\n", k, versions)
+		fVersions := strings.Join(versions[0:10], "\t")
+		out = out + fmt.Sprintf("\n  %s:\n   %s\n", k, fVersions)
 	}
 
 	return out
@@ -131,7 +177,7 @@ func (n *NodeService) GetPrefix(version string) (v string, p string) {
 		v = version
 	}
 
-	if !strings.HasPrefix(v, "v") {
+	if !strings.HasPrefix(v, "v") && v != "latest" {
 		v = "v" + v
 	}
 
