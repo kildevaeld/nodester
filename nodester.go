@@ -1,214 +1,131 @@
-package main
+package nodester
 
 import (
-	"errors"
-	"fmt"
+	"encoding/json"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
-
-	"github.com/codegangsta/cli"
-	"github.com/mitchellh/go-homedir"
 )
 
-type NodeCli struct {
-	Node *NodeManager
+const (
+	NODE_REPO     = "https://nodejs.org/dist/"
+	NODE_MANIFEST = NODE_REPO + "index.json"
+)
+
+type Config struct {
+	Root    string
+	Cache   string
+	Source  string
+	Current string
 }
 
-func (n *NodeCli) Run(c *cli.Context) {
-	n.init(c)
-
+type RemoteOptions struct {
+	Max int
+	Lts bool
 }
 
-func (n *NodeCli) Use(c *cli.Context) {
-	args := c.Args()
-	if len(args) == 0 {
-		fmt.Println("  Please specify a version\n")
-		os.Exit(1)
+type Nodester struct {
+	config Config
+}
+
+func (self *Nodester) List() ([]string, error) {
+	return nil, nil
+}
+
+func getManifest() (Manifests, error) {
+	res, err := http.Get(NODE_MANIFEST)
+
+	if err != nil {
+		return nil, err
 	}
-	version := args.First()
-	force := c.Bool("force")
-	migrate := c.Bool("migrate")
-	current := n.Node.Current()
+	var bs []byte
+	bs, err = ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	res.Body.Close()
 
-	if !n.Node.Has(version) {
-		if !force {
-			fmt.Printf("  %s not installed\n", version)
-			os.Exit(1)
-		} else {
-			n.Install(c)
+	var results Manifests
+	if err := json.Unmarshal(bs, &results); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+func (self *Nodester) ListRemote(options RemoteOptions) (Manifests, error) {
+	var m Manifests
+	var err error
+	if m, err = getManifest(); err != nil {
+		return nil, err
+	}
+
+	max := len(m)
+	ln := max
+
+	if options.Max != 0 || options.Max <= max {
+		max = options.Max
+	}
+
+	if !options.Lts {
+		if max == ln {
+			return m, nil
+		}
+		return m[0:max], nil
+	}
+
+	var found = 0
+	for _, man := range m {
+		if man.isLts() {
+			m[found] = man
+			found++
 		}
 	}
 
-	if migrate && current != "" {
-		err := NewProcess(fmt.Sprintf("  Migrating modules from %s to %s...", current, version), func() error {
-			return n.Node.Migrate(current, version)
-		})
+	if max > found {
+		max = found
+	}
+
+	return m[0:max], nil
+}
+
+func (self *Nodester) Install() error {
+	return nil
+}
+
+func (self *Nodester) Init() error {
+
+	path := self.config.Root
+
+	if !DirExists(path) {
+		err := os.MkdirAll(path, 0755)
 		if err != nil {
-			fmt.Printf("  Migration failed: %s\n", err.Error())
-			os.Exit(1)
-		}
-
-	}
-
-	n.Node.Use(version)
-	fmt.Printf("  Current version: %s\n", version)
-
-}
-
-func (n *NodeCli) Install(c *cli.Context) {
-
-	args := c.Args()
-	if len(args) == 0 {
-		fmt.Println("  Please specify a version\n")
-		os.Exit(1)
-	}
-	for _, version := range args {
-		err := NewProgress(fmt.Sprintf("  Downloading %s ...", version), func(fn func(str string)) error {
-			_, err := n.Node.Download(version, func(p DownloadProgress) {
-				str := fmt.Sprintf("%d/%d kb", p.Progress/1024, p.Total/1014)
-				fn(str)
-			})
-
 			return err
-		})
-
-		if err != nil {
-			fmt.Printf("  Could not download '%s' due to: %s\n", version, err.Error())
-			os.Exit(1)
-		}
-
-		NewProcess(fmt.Sprintf("  Installing %s ...", version), func() error {
-			return n.Node.Install(version)
-		})
-
-	}
-}
-
-func (n *NodeCli) Remove(c *cli.Context) {
-
-	args := c.Args()
-	if len(args) == 0 {
-		fmt.Println("  Plesase sepcify a version\n")
-		os.Exit(1)
-	}
-	version := args.First()
-
-	NewProcess("  Removing "+version+" ...", func() error {
-		return n.Node.Remove(version)
-	})
-
-}
-
-func (n *NodeCli) Migrate(c *cli.Context) {
-
-	if len(c.Args()) != 2 {
-		fmt.Println("  Please spcify a from and to version\n")
-		os.Exit(1)
-	}
-
-	from := c.Args().First()
-	to := c.Args()[1]
-
-	err := NewProcess(fmt.Sprintf("  Migrating modules from %s to %s...", from, to), func() error {
-		return n.Node.Migrate(from, to)
-	})
-	if err != nil {
-		fmt.Printf("  Migration failed: %s\n", err.Error())
-		os.Exit(1)
-	}
-}
-
-func (n *NodeCli) Clear(c *cli.Context) {
-
-	NewProcess("  Clearing cache...", func() error {
-		return n.Node.CleanCache()
-	})
-
-}
-
-func (n *NodeCli) List(c *cli.Context) {
-
-	versions := n.Node.List()
-
-	fmt.Printf("Versions: %s\n", versions)
-}
-
-func (n *NodeCli) ListRemote(c *cli.Context) {
-	p := &Process{
-		Msg: "  Fetching remote list ...",
-	}
-	p.Start()
-
-	remote, err := n.Node.ListRemote()
-	if err != nil {
-		p.Done("error")
-		os.Exit(1)
-	} else {
-		p.Done("ok")
-	}
-	fmt.Printf("  Remote Versions: %s\n\n", remote)
-}
-
-func (n *NodeCli) Current(c *cli.Context) {
-	fmt.Printf("  Current: %s\n", n.Node.Current())
-}
-
-func (n *NodeCli) init(c *cli.Context) (err error) {
-
-	if n.Node == nil {
-
-		path := os.Getenv("NODESTER_ROOT")
-
-		if path == "" {
-			home, e := homedir.Dir()
-			if e != nil {
-				err = e
-				return
-			}
-
-			defaultPath := filepath.Join(home, ".nodester")
-
-			if exists(defaultPath) {
-				n.Node = NewNodeManager(defaultPath)
-				return nil
-			}
-
-			var tmp string
-			var set bool
-			for {
-				os.Stdout.WriteString("NODSTER_ROOT not set. Should I use default directory: ~/.nodester? [Y/n]")
-				fmt.Scanf("%s", &tmp)
-				tmp = strings.ToLower(tmp)
-				if tmp == "" {
-					set = true
-					break
-				}
-
-				if !strings.Contains("yn", tmp) {
-					os.Stdout.WriteString("\033[2K\r")
-					continue
-				}
-				if tmp == "y" {
-					set = true
-				} else {
-					set = false
-				}
-				break
-			}
-
-			if !set {
-				err = errors.New("Node root path not defined")
-			} else {
-				p := filepath.Join(home, ".nodester")
-				n.Node = NewNodeManager(p)
-			}
-
-		} else {
-			n.Node = NewNodeManager(path)
 		}
 	}
 
-	return err
+	conf := self.config
 
+	conf.Cache = filepath.Join(path, "cache")
+	conf.Source = filepath.Join(path, "source")
+	conf.Current = filepath.Join(path, "current")
+
+	if err := ensureDir(conf.Cache); err != nil {
+		return err
+	}
+
+	if err := ensureDir(conf.Source); err != nil {
+		return err
+	}
+
+	if err := ensureDir(conf.Current); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func New(config Config) *Nodester {
+	return &Nodester{config}
 }
