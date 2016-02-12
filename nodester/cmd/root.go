@@ -90,3 +90,7 @@ func initConfig() {
 	}
 
 }
+
+func writeError(err error) {
+	fmt.Printf("Got error:\n  %s", err)
+}

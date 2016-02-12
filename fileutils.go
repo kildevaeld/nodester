@@ -66,3 +66,10 @@ func copy(dest io.Writer, src io.Reader, progress func(p int64)) (written int64,
 
 	return written, err
 }
+
+func normalizeVersion(v string) string {
+	if v[0] == 'v' {
+		return v
+	}
+	return "v" + v
+}

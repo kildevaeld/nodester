@@ -14,7 +14,7 @@
 
 package main
 
-import "github.com/kildevaeld/nodester2/nodester/cmd"
+import "github.com/kildevaeld/nodester/nodester/cmd"
 
 func main() {
 	cmd.Execute()

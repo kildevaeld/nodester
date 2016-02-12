@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -30,10 +31,36 @@ type Nodester struct {
 }
 
 func (self *Nodester) List() ([]string, error) {
+
+	path := self.config.Source
+
+	if err := ensureDir(path); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 
-func getManifest() (Manifests, error) {
+func getManifest(config Config) (Manifests, error) {
+
+	cache := filepath.Join(config.Cache, "manifests.json")
+
+	if FileExists(cache) {
+		s, _ := os.Stat(cache)
+		fma := time.Now().Add(-5 * time.Minute)
+		if !s.ModTime().Before(fma) {
+			bs, err := ioutil.ReadFile(cache)
+
+			if err == nil {
+				var results Manifests
+				if err := json.Unmarshal(bs, &results); err != nil {
+					return nil, err
+				}
+				return results, err
+			}
+		}
+	}
+
 	res, err := http.Get(NODE_MANIFEST)
 
 	if err != nil {
@@ -51,20 +78,22 @@ func getManifest() (Manifests, error) {
 		return nil, err
 	}
 
+	ioutil.WriteFile(cache, bs, 0755)
+
 	return results, nil
 }
 
 func (self *Nodester) ListRemote(options RemoteOptions) (Manifests, error) {
 	var m Manifests
 	var err error
-	if m, err = getManifest(); err != nil {
+	if m, err = getManifest(self.config); err != nil {
 		return nil, err
 	}
 
 	max := len(m)
 	ln := max
 
-	if options.Max != 0 || options.Max <= max {
+	if options.Max != 0 && options.Max <= max {
 		max = options.Max
 	}
 
@@ -105,7 +134,7 @@ func (self *Nodester) Init() error {
 		}
 	}
 
-	conf := self.config
+	conf := &self.config
 
 	conf.Cache = filepath.Join(path, "cache")
 	conf.Source = filepath.Join(path, "source")

@@ -16,10 +16,15 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kildevaeld/nodester"
 	"github.com/spf13/cobra"
 )
+
+var detailedOutput bool
+var printMax int
+var longtermFlag bool
 
 // remoteCmd represents the remote command
 var remoteCmd = &cobra.Command{
@@ -35,12 +40,20 @@ to quickly create a Cobra application.`,
 		// TODO: Work your own magic here
 
 		r, e := node.ListRemote(nodester.RemoteOptions{
-			Lts: true,
-			Max: 10,
+			Lts: longtermFlag,
+			Max: printMax,
 		})
 
-		
-		
+		if e != nil {
+			writeError(e)
+			return
+		}
+
+		if detailedOutput {
+			return
+		}
+
+		printSimple(r)
 	},
 }
 
@@ -52,9 +65,21 @@ func init() {
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
 	// remoteCmd.PersistentFlags().String("foo", "", "A help for foo")
-
+	remoteCmd.Flags().BoolVarP(&detailedOutput, "details", "d", false, "Get info")
+	remoteCmd.Flags().BoolVarP(&longtermFlag, "long-term", "l", false, "Get info")
+	remoteCmd.Flags().IntVarP(&printMax, "max", "m", 10, "Get info")
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// remoteCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
+}
+
+func printSimple(ms nodester.Manifests) {
+	versions := make([]string, len(ms))
+	for i, m := range ms {
+		versions[i] = m.Version
+	}
+	s := strings.Join(versions, "\t")
+
+	fmt.Println(s)
 }
