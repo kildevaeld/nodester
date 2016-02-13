@@ -24,14 +24,6 @@ var (
 	ErrExistsNotInCache = errors.New("cache")
 )
 
-type Config struct {
-	Root    string
-	Cache   string
-	Source  string
-	Current string
-	Temp    string
-}
-
 type RemoteOptions struct {
 	Max                int
 	Lts                bool
@@ -42,9 +34,9 @@ type Nodester struct {
 	config Config
 }
 
-func (self *Nodester) List() (Manifests, error) {
+func (self *Nodester) List(lang string) (Manifests, error) {
 
-	path := self.config.Source
+	path := self.config.Source(lang)
 
 	if err := ensureDir(path); err != nil {
 		return nil, err
