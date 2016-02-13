@@ -1,19 +1,21 @@
 package nodester
 
+import "fmt"
+
 type Manifests []Manifest
 
 type Manifest struct {
-	Version string
-	Date    string
-	Files   []string
-	Lts     interface{}
-	/*Modules string
-	Npm     string
-	V8      string
-	Uv      string
-	Zlib    string
-	OpenSSL string
-	Lts     bool*/
+	Version   string
+	Date      string
+	Files     []string
+	Lts       interface{}
+	Modules   string
+	Npm       string
+	V8        string
+	Uv        string
+	Zlib      string
+	OpenSSL   string
+	Installed bool
 }
 
 func (self Manifest) isLts() bool {
@@ -29,3 +31,53 @@ func (self Manifest) isLts() bool {
 	}
 	return false
 }
+
+func (self Manifest) isHostCompatible(oss, arch string) bool {
+
+	oss = normalizeOs(oss)
+	arch = normalizeArch(arch)
+
+	ossarch := oss + "-" + arch
+	if oss == "osx" {
+		ossarch += "-tar"
+	}
+
+	for _, src := range self.Files {
+		fmt.Printf("OSARCH %s %s\n", ossarch, src)
+		if ossarch == src {
+			return true
+		}
+	}
+	return false
+}
+
+func (self Manifest) remoteFile(oss, arch string, source bool) string {
+	oss = normalizeOs(oss)
+	arch = normalizeArch(arch)
+	if arch == "win" && oss == "x64" {
+
+	}
+	fn := fmt.Sprintf("%s/%s/node-%s", NODE_REPO, self.Version, self.Version)
+	if source {
+		return fn + ".tar.gz"
+	}
+    
+
+	return fmt.Sprintf("%s-%s-%s.tar.gz",fn oss,arch)
+}
+
+func (self Manifest) localFile(oss, arch string, source bool) string {
+	oss = normalizeOs(oss)
+	arch = normalizeArch(arch)
+	if arch == "win" && oss == "x64" {
+
+	}
+	fn := "node-" + self.Version
+	if source {
+		return fn + ".tar.gz"
+	}
+    
+
+	return fmt.Sprintf("%s-%s-%s.tar.gz",fn oss,arch)
+}
+

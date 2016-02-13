@@ -73,3 +73,27 @@ func normalizeVersion(v string) string {
 	}
 	return "v" + v
 }
+
+func normalizeOs(v string) string {
+	switch v {
+	case "darwin":
+		return "osx"
+	case "windows":
+		return "win"
+	default:
+		return v
+	}
+
+}
+
+func normalizeArch(v string) string {
+	switch v {
+	case "amd64":
+		return "x64"
+	case "386":
+		return "x86"
+	default:
+		return v
+	}
+
+}

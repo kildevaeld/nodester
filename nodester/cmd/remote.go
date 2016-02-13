@@ -16,9 +16,11 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/kildevaeld/nodester"
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +30,7 @@ var longtermFlag bool
 
 // remoteCmd represents the remote command
 var remoteCmd = &cobra.Command{
-	Use:   "remote",
+	Use:   "list-remote",
 	Short: "A brief description of your command",
 	Long: `A longer description that spans multiple lines and likely contains examples
 and usage of using your command. For example:
@@ -40,8 +42,9 @@ to quickly create a Cobra application.`,
 		// TODO: Work your own magic here
 
 		r, e := node.ListRemote(nodester.RemoteOptions{
-			Lts: longtermFlag,
-			Max: printMax,
+			Lts:                longtermFlag,
+			Max:                printMax,
+			HostCompatibleOnly: false,
 		})
 
 		if e != nil {
@@ -50,28 +53,22 @@ to quickly create a Cobra application.`,
 		}
 
 		if detailedOutput {
-			return
+			printDetailed(r)
+		} else {
+			printSimple(r)
 		}
 
-		printSimple(r)
 	},
 }
 
 func init() {
 	RootCmd.AddCommand(remoteCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// remoteCmd.PersistentFlags().String("foo", "", "A help for foo")
 	remoteCmd.Flags().BoolVarP(&detailedOutput, "details", "d", false, "Get info")
 	remoteCmd.Flags().BoolVarP(&longtermFlag, "long-term", "l", false, "Get info")
 	remoteCmd.Flags().IntVarP(&printMax, "max", "m", 10, "Get info")
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// remoteCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
+	remoteCmd.Aliases = []string{"lsr"}
 }
 
 func printSimple(ms nodester.Manifests) {
@@ -82,4 +79,18 @@ func printSimple(ms nodester.Manifests) {
 	s := strings.Join(versions, "\t")
 
 	fmt.Println(s)
+}
+
+func printDetailed(ms nodester.Manifests) {
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Version", "Longterm", "Date", "Npm", "V8", "Installed"})
+	for _, v := range ms {
+		installed := "X"
+		if v.Installed {
+			installed = "V"
+		}
+		table.Append([]string{v.Version, fmt.Sprintf("%v", v.Lts), v.Date, v.Npm, v.V8, installed})
+	}
+
+	table.Render()
 }
