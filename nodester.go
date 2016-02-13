@@ -1,7 +1,9 @@
 package nodester
 
 import (
+	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -15,11 +17,17 @@ const (
 	NODE_MANIFEST = NODE_REPO + "index.json"
 )
 
+var (
+	ErrInvalidVersion   = errors.New("Invalid version")
+	ErrExistsNotInCache = errors.New("cache")
+)
+
 type Config struct {
 	Root    string
 	Cache   string
 	Source  string
 	Current string
+	Temp    string
 }
 
 type RemoteOptions struct {
@@ -41,6 +49,16 @@ func (self *Nodester) List() ([]string, error) {
 	}
 
 	return nil, nil
+}
+
+func (self *Nodester) Current() string {
+	path := filepath.Join(self.config.Root, "version")
+
+	if FileExists(path) {
+		bs, _ := ioutil.ReadFile(path)
+		return string(bs)
+	}
+	return ""
 }
 
 func downloadManifests(config Config) (Manifests, error) {
@@ -132,7 +150,153 @@ func (self *Nodester) ListRemote(options RemoteOptions) (Manifests, error) {
 	return m[0:max], nil
 }
 
-func (self *Nodester) Install() error {
+func (self *Nodester) Remove(version Version) error {
+	manifest, err := self.GetManifest(version.Version)
+
+	if err != nil {
+		return err
+	}
+
+	if manifest.Version == "" {
+		return ErrInvalidVersion
+	}
+
+	sourceDir := filepath.Join(self.config.Source, version.Name())
+
+	if manifest.Version == self.Current() {
+		os.Remove(self.config.Current)
+		os.Remove(filepath.Join(self.config.Root, "version"))
+	}
+
+	if DirExists(sourceDir) {
+		return os.RemoveAll(sourceDir)
+	}
+
+	return nil
+}
+
+func (self *Nodester) ClearCache() error {
+	os.RemoveAll(self.config.Cache)
+	return os.MkdirAll(self.config.Cache, 0755)
+}
+
+func (self *Nodester) Install(version Version, progressCB func(step Step)) error {
+
+	manifest, err := self.GetManifest(version.Version)
+
+	if err != nil {
+		return err
+	}
+
+	if manifest.Version == "" {
+		return ErrInvalidVersion
+	}
+
+	if progressCB == nil {
+		progressCB = func(Step) {}
+	}
+
+	sourceDir := filepath.Join(self.config.Source, version.Name())
+
+	if !DirExists(sourceDir) {
+		localFile := filepath.Join(self.config.Cache, manifest.localFile(version.Os, version.Arch, version.Source))
+
+		if !FileExists(localFile) {
+			return ErrExistsNotInCache
+		}
+
+		file, ferr := os.Open(localFile)
+
+		if ferr != nil {
+			return ferr
+		}
+		defer file.Close()
+
+		reader, rerr := gzip.NewReader(file)
+		if rerr != nil {
+			return rerr
+		}
+		defer reader.Close()
+		progressCB(Unpack)
+
+		target := self.config.Source
+
+		if version.Source {
+			target = self.config.Temp
+		}
+
+		err = UnpackFile(reader, target, 0)
+
+		if err != nil {
+			return err
+		}
+
+		if version.Source {
+			progressCB(Compile)
+			return compile(filepath.Join(self.config.Temp, version.Name()), self.config, version, progressCB)
+		}
+	}
+
+	return err
+}
+
+func (self *Nodester) Has(version Version) bool {
+	return DirExists(filepath.Join(self.config.Source, version.Name()))
+}
+
+func (self *Nodester) Use(version Version) error {
+
+	_, err := self.GetManifest(version.Version)
+
+	if err != nil {
+		return err
+	}
+
+	destPath := self.config.Current
+	if destPath[len(destPath)-1] != '/' {
+		//destPath += "/"
+	}
+
+	if DirExists(destPath) || FileExists(destPath) {
+		if err := os.RemoveAll(destPath); err != nil {
+			return err
+		}
+	}
+
+	sourcePath := filepath.Join(self.config.Source, version.Name())
+
+	if sourcePath[len(sourcePath)-1] != '/' {
+		//sourcePath += "/"
+	}
+
+	if !DirExists(sourcePath) {
+		return errors.New("Not installed")
+	}
+
+	return os.Symlink(sourcePath, destPath)
+
+}
+
+func (self *Nodester) Download(version Version, progressCB func(progress, total int64)) error {
+
+	manifest, err := self.GetManifest(version.Version)
+
+	if err != nil {
+		return err
+	}
+
+	if manifest.Version == "" {
+		return ErrInvalidVersion
+	}
+
+	localFile := filepath.Join(self.config.Cache, manifest.localFile(version.Os, version.Arch, version.Source))
+
+	if !FileExists(localFile) {
+		err = self.download(manifest, version.Os, version.Arch, version.Source, progressCB)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -153,9 +317,9 @@ func (self *Nodester) GetManifest(version string) (Manifest, error) {
 	return Manifest{}, nil
 }
 
-func (self *Nodester) download(manifest Manifest, Os, arch string, source bool, progress func(progress, total int)) error {
+func (self *Nodester) download(manifest Manifest, Os, arch string, source bool, progressCB func(progress, total int64)) error {
 
-	localFile := filepath.Join(self.config.Cache, manifest.localFile(os, arch, source))
+	localFile := filepath.Join(self.config.Cache, manifest.localFile(Os, arch, source))
 
 	res, err := http.Get(manifest.remoteFile(Os, arch, source))
 
@@ -163,7 +327,7 @@ func (self *Nodester) download(manifest Manifest, Os, arch string, source bool, 
 		return err
 	}
 
-	file, err := os.Open(localFile)
+	file, err := os.Create(localFile)
 
 	if err != nil {
 		return err
@@ -172,10 +336,17 @@ func (self *Nodester) download(manifest Manifest, Os, arch string, source bool, 
 	defer file.Close()
 	defer res.Body.Close()
 
+	_, err = copy(file, res.Body, func(progress int64) {
+		if progressCB != nil {
+			progressCB(progress, res.ContentLength)
+		}
+	})
+
+	return err
 }
 
 func (self *Nodester) Init() error {
-
+	var err error
 	path := self.config.Root
 
 	if !DirExists(path) {
@@ -184,13 +355,18 @@ func (self *Nodester) Init() error {
 			return err
 		}
 	}
+	path, err = filepath.Abs(path)
+
+	if err != nil {
+		return err
+	}
 
 	conf := &self.config
 
 	conf.Cache = filepath.Join(path, "cache")
 	conf.Source = filepath.Join(path, "source")
 	conf.Current = filepath.Join(path, "current")
-
+	conf.Temp = filepath.Join(path, "temp")
 	if err := ensureDir(conf.Cache); err != nil {
 		return err
 	}
@@ -200,6 +376,10 @@ func (self *Nodester) Init() error {
 	}
 
 	if err := ensureDir(conf.Current); err != nil {
+		return err
+	}
+
+	if err := ensureDir(conf.Temp); err != nil {
 		return err
 	}
 

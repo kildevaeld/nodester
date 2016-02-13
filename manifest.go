@@ -61,9 +61,14 @@ func (self Manifest) remoteFile(oss, arch string, source bool) string {
 	if source {
 		return fn + ".tar.gz"
 	}
-    
 
-	return fmt.Sprintf("%s-%s-%s.tar.gz",fn oss,arch)
+	return fmt.Sprintf("%s-%s-%s.tar.gz", fn, oss, arch)
+}
+
+func (self Manifest) checksumFile() string {
+
+	return fmt.Sprintf("%s/%s/SHASUMS256.txt", NODE_REPO, self.Version)
+
 }
 
 func (self Manifest) localFile(oss, arch string, source bool) string {
@@ -76,8 +81,27 @@ func (self Manifest) localFile(oss, arch string, source bool) string {
 	if source {
 		return fn + ".tar.gz"
 	}
-    
 
-	return fmt.Sprintf("%s-%s-%s.tar.gz",fn oss,arch)
+	return fmt.Sprintf("%s-%s-%s.tar.gz", fn, oss, arch)
 }
 
+type Version struct {
+	Version string
+	Arch    string
+	Os      string
+	Source  bool
+}
+
+func (self Version) Name() string {
+	oss := normalizeOs(self.Os)
+	arch := normalizeArch(self.Arch)
+	if arch == "win" && oss == "x64" {
+
+	}
+	fn := "node-" + normalizeVersion(self.Version)
+	if self.Source {
+		return fn
+	}
+
+	return fmt.Sprintf("%s-%s-%s", fn, oss, arch)
+}
