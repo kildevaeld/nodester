@@ -36,6 +36,9 @@ func (self Manifest) isHostCompatible(oss, arch string) bool {
 
 	oss = normalizeOs(oss)
 	arch = normalizeArch(arch)
+	if oss == "darwin" {
+		oss = "osx"
+	}
 
 	ossarch := oss + "-" + arch
 	if oss == "osx" {
@@ -43,7 +46,7 @@ func (self Manifest) isHostCompatible(oss, arch string) bool {
 	}
 
 	for _, src := range self.Files {
-		fmt.Printf("OSARCH %s %s\n", ossarch, src)
+
 		if ossarch == src {
 			return true
 		}
@@ -57,6 +60,11 @@ func (self Manifest) remoteFile(oss, arch string, source bool) string {
 	if arch == "win" && oss == "x64" {
 
 	}
+
+	if oss == "osx" {
+		oss = "darwin"
+	}
+
 	fn := fmt.Sprintf("%s/%s/node-%s", NODE_REPO, self.Version, self.Version)
 	if source {
 		return fn + ".tar.gz"
@@ -77,6 +85,11 @@ func (self Manifest) localFile(oss, arch string, source bool) string {
 	if arch == "win" && oss == "x64" {
 
 	}
+
+	if oss == "osx" {
+		oss = "darwin"
+	}
+
 	fn := "node-" + self.Version
 	if source {
 		return fn + ".tar.gz"

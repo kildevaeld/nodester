@@ -38,36 +38,28 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		v := nodester.Version{
-			Version: args[0],
-			Arch:    runtime.GOARCH,
-			Os:      runtime.GOOS,
-			Source:  sourceFlag,
+		if len(args) == 0 {
+			fmt.Printf("Usage: ")
+			return
 		}
-		fmt.Printf("  Installing %s\n", v.Version)
-		if !node.Has(v) {
-			err := NewProgress("  Downloading\t...", func(fn func(str string)) error {
-				return node.Download(v, func(p, t int64) {
-					fn(fmt.Sprintf("%d/%d kb", p/1024, t/1014))
-				})
-			})
 
-			if err != nil {
-				writeError(err)
+		for _, varg := range args {
+			v := nodester.Version{
+				Version: varg,
+				Arch:    runtime.GOARCH,
+				Os:      runtime.GOOS,
+				Source:  sourceFlag,
 			}
 
-			err = NewProgress("  Installing\t...", func(fn func(str string)) error {
-				return node.Install(v, func(s nodester.Step) {
-					fn(s.String())
-				})
-			})
+			fmt.Printf("  Installing %s\n", v.Version)
 
-			fmt.Println("")
-
-			if err != nil {
-				writeError(err)
+			if err := install(v); err != nil {
+				fmt.Printf("    Error happended: %s\n", err.Error())
 			}
+
 		}
+
+		fmt.Println("")
 
 	},
 }
@@ -79,20 +71,11 @@ func init() {
 	installCmd.Flags().BoolVarP(&sourceFlag, "source", "s", false, "install and build from source")
 	installCmd.Flags().StringVarP(&archFlag, "arch", "a", runtime.GOARCH, "install and build from source")
 	installCmd.Flags().StringVarP(&osFlag, "os", "o", runtime.GOOS, "install and build from source")
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// installCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// installCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
 }
 
 func install(v nodester.Version) error {
-	fmt.Printf("  Installing %s\n", v.Version)
+
 	if !node.Has(v) {
 		err := NewProgress("  Downloading\t...", func(fn func(str string)) error {
 			return node.Download(v, func(p, t int64) {
@@ -107,8 +90,6 @@ func install(v nodester.Version) error {
 		err = NewProcess("  Unpacking\t...", func() error {
 			return node.Install(v, nil)
 		})
-
-		fmt.Println("")
 
 		return err
 	}

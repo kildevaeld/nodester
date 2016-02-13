@@ -22,6 +22,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var forceFlag bool
+
 // useCmd represents the use command
 var useCmd = &cobra.Command{
 	Use:   "use",
@@ -45,6 +47,10 @@ to quickly create a Cobra application.`,
 		}
 
 		if !node.Has(version) {
+			if !forceFlag {
+				fmt.Printf("  %s is not installed\n", version.Version)
+				return
+			}
 			err := install(version)
 			if err != nil {
 				writeError(err)
@@ -66,6 +72,8 @@ func init() {
 	RootCmd.AddCommand(useCmd)
 
 	useCmd.Aliases = []string{"u"}
+
+	useCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "Force installation")
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command

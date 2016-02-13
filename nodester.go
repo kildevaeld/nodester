@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -40,7 +42,7 @@ type Nodester struct {
 	config Config
 }
 
-func (self *Nodester) List() ([]string, error) {
+func (self *Nodester) List() (Manifests, error) {
 
 	path := self.config.Source
 
@@ -48,7 +50,32 @@ func (self *Nodester) List() ([]string, error) {
 		return nil, err
 	}
 
-	return nil, nil
+	files, err := ioutil.ReadDir(path)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var out Manifests
+	for _, file := range files {
+
+		if !file.IsDir() {
+			continue
+		}
+		split := strings.Split(file.Name(), "-")
+
+		if len(split) < 2 {
+			continue
+		}
+		manifest, merr := self.GetManifest(split[1])
+		if merr != nil {
+			return nil, merr
+		}
+		manifest.Installed = true
+		out = append(out, manifest)
+	}
+
+	return out, nil
 }
 
 func (self *Nodester) Current() string {
@@ -126,6 +153,34 @@ func (self *Nodester) ListRemote(options RemoteOptions) (Manifests, error) {
 			}
 		}
 		m = m[0:found]
+	}
+
+	for i, man := range m {
+	inner:
+		for _, v := range man.Files {
+
+			split := strings.Split(v, "-")
+
+			var arch, oss string
+
+			if len(split) == 2 {
+				arch = split[0]
+				oss = split[1]
+			} else {
+
+			}
+
+			if self.Has(Version{
+				Version: man.Version,
+				Arch:    arch,
+				Os:      oss,
+				Source:  len(split) == 1,
+			}) {
+				man.Installed = true
+				break inner
+			}
+		}
+		m[i] = man
 	}
 
 	if !options.Lts {
@@ -246,7 +301,7 @@ func (self *Nodester) Has(version Version) bool {
 
 func (self *Nodester) Use(version Version) error {
 
-	_, err := self.GetManifest(version.Version)
+	m, err := self.GetManifest(version.Version)
 
 	if err != nil {
 		return err
@@ -273,8 +328,17 @@ func (self *Nodester) Use(version Version) error {
 		return errors.New("Not installed")
 	}
 
-	return os.Symlink(sourcePath, destPath)
+	err = os.Symlink(sourcePath, destPath)
 
+	if err != nil {
+		return err
+	}
+
+	versionFile := filepath.Join(self.config.Root, "version")
+
+	ioutil.WriteFile(versionFile, []byte(m.Version), 0755)
+
+	return nil
 }
 
 func (self *Nodester) Download(version Version, progressCB func(progress, total int64)) error {
@@ -321,6 +385,7 @@ func (self *Nodester) download(manifest Manifest, Os, arch string, source bool, 
 
 	localFile := filepath.Join(self.config.Cache, manifest.localFile(Os, arch, source))
 
+	log.Printf("Remote file %s\n", manifest.remoteFile(Os, arch, source))
 	res, err := http.Get(manifest.remoteFile(Os, arch, source))
 
 	if err != nil {

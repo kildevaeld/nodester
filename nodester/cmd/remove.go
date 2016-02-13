@@ -14,7 +14,12 @@
 
 package cmd
 
-import "github.com/spf13/cobra"
+import (
+	"runtime"
+
+	"github.com/kildevaeld/nodester"
+	"github.com/spf13/cobra"
+)
 
 // removeCmd represents the remove command
 var removeCmd = &cobra.Command{
@@ -27,7 +32,17 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// TODO: Work your own magic here
+
+		for _, v := range args {
+			version := nodester.Version{
+				Version: v,
+				Arch:    runtime.GOARCH,
+				Os:      runtime.GOOS,
+			}
+			NewProcess("  Removing "+v, func() error {
+				return node.Remove(version)
+			})
+		}
 
 	},
 }

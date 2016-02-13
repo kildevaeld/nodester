@@ -79,8 +79,8 @@ func normalizeVersion(v string) string {
 
 func normalizeOs(v string) string {
 	switch v {
-	case "darwin":
-		return "osx"
+	case "osx":
+		return "darwin"
 	case "windows":
 		return "win"
 	default:
